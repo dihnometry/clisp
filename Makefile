@@ -1,5 +1,5 @@
-all: parsing.c mpc.c mpc.h
-	gcc -Wall parsing.c mpc.c -ledit -lm -o parsing
+all: clisp.c
+	gcc -Wall clisp.c mpc.c -ledit -lm -o clisp
 
-debug: parsing.c 
-	gcc -Wall parsing.c mpc.c -g -ledit -lm -o parsing
+debug: clisp.c 
+	gcc -Wall clisp.c mpc.c -g -ledit -lm -o clisp
