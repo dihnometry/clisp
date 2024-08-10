@@ -22,6 +22,7 @@ void add_history(char* unused) {}
 #else
 #include <editline/readline.h>
 #endif
+
 #define LASSERT(args, cond, fmt, ...) \
     if (!(cond)) { \
         lval* err = lval_err(fmt, ##__VA_ARGS__); \
@@ -44,10 +45,11 @@ typedef struct lval lval;
 typedef struct lenv lenv;
 
 // Create an enum for possible lval types
-enum { LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR };
+enum { LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_FUN, LVAL_SFUN, LVAL_SEXPR, LVAL_QEXPR };
 
 char* ltype_name(int t) {
     switch (t) {
+        case LVAL_SFUN:
         case LVAL_FUN: return "Function"; break;
         case LVAL_NUM: return "Number"; break;
         case LVAL_ERR: return "Error"; break;
@@ -121,6 +123,13 @@ lval* lval_fun(lbuiltin func) {
     return v;
 }
 
+lval* lval_sfun(lbuiltin func) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_SFUN;
+    v->fun = func;
+    return v;
+}
+
 lval* lval_sexpr(void) {
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_SEXPR;
@@ -139,10 +148,12 @@ lval* lval_qexpr(void) {
 
 void lval_del(lval* v) {
     switch (v->type) {
-        case LVAL_FUN:
         case LVAL_NUM: break;
 
         case LVAL_ERR: free(v->err); break;
+
+        case LVAL_FUN:
+        case LVAL_SFUN:
         case LVAL_SYM: free(v->sym); break;
 
         case LVAL_QEXPR:
@@ -197,6 +208,7 @@ lval* lval_copy(lval* v) {
 
     switch (v->type) {
         case LVAL_NUM: x->num = v->num; break;
+        case LVAL_SFUN:
         case LVAL_FUN: 
             x->fun = v->fun;
             x->sym = malloc(strlen(v->sym) + 1);
@@ -242,6 +254,7 @@ void lval_print(lval* v) {
         case LVAL_NUM: printf("%li", v->num); break;
         case LVAL_SYM: printf("%s",  v->sym); break;
         case LVAL_FUN: printf("<function '%s'>", v->sym);  break;
+        case LVAL_SFUN: printf("<function '%s'>", v->sym);  break;
         case LVAL_ERR: printf("%s",  v->err); break;
         case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
         case LVAL_QEXPR: lval_expr_print(v, '{', '}'); break;
@@ -463,7 +476,7 @@ lval* builtin_def(lenv* e, lval* a) {
     for (int i = 0; i < syms->count; i++)
         LASSERT(a, syms->cell[i]->type == LVAL_SYM, "Function 'def' cannot define non-symbol.");
 
-    LASSERT(a, syms->count == a->count - 1, LARG_ERR("def", a->count, syms->count));
+    LASSERT(a, syms->count == a->count - 1, LARG_ERR("def", a->count - 1, syms->count));
 
     for (int i = 0; i < syms->count; i++)
         lenv_put(e, syms->cell[i], a->cell[i + 1]);
@@ -472,9 +485,38 @@ lval* builtin_def(lenv* e, lval* a) {
     return lval_sexpr();
 }
 
+lval* builtin_print_env(lenv* e, lval* a) {
+    LASSERT(a, a->count == 0, LARG_ERR("print-env", a->count, 0));
+
+    for (int i = 0; i < e->count; i++) {
+        printf("%s: ", e->syms[i]);
+        lval_println(e->vals[i]);
+    }
+
+    lval_del(a);
+    return lval_sexpr();
+}
+
+lval* builtin_exit(lenv* e, lval* a) {
+    LASSERT(a, a->count == 0, LARG_ERR("exit", a->count, 0));
+
+    exit(0);
+    return lval_sexpr();
+}
+
 void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
     lval* k = lval_sym(name);
     lval* v = lval_fun(func);
+    v->sym = malloc(strlen(name) + 1);
+    strcpy(v->sym, name);
+    lenv_put(e, k, v);
+    lval_del(k);
+    lval_del(v);
+}
+
+void lenv_add_sbuiltin(lenv* e, char* name, lbuiltin func) {
+    lval* k = lval_sym(name);
+    lval* v = lval_sfun(func);
     v->sym = malloc(strlen(name) + 1);
     strcpy(v->sym, name);
     lenv_put(e, k, v);
@@ -501,6 +543,8 @@ void lenv_add_builtins(lenv* e) {
 
     // Variable functions
     lenv_add_builtin(e, "def", builtin_def);
+    lenv_add_sbuiltin(e, "print-env", builtin_print_env);
+    lenv_add_sbuiltin(e, "exit", builtin_exit);
 }
 
 lval* lval_eval_sexpr(lenv* e, lval* v) {
@@ -519,11 +563,11 @@ lval* lval_eval_sexpr(lenv* e, lval* v) {
     if (v->count == 0)
         return v;
     // Single expression
-    if (v->count == 1)
+    if (v->count == 1 && v->cell[0]->type != LVAL_SFUN)
         return lval_take(v, 0);
 
     lval* f = lval_pop(v, 0);
-    if (f->type != LVAL_FUN) {
+    if (f->type != LVAL_FUN && f->type != LVAL_SFUN) {
         lval_del(f);
         lval_del(v);
         return lval_err("First element is not a function.");
@@ -590,7 +634,6 @@ int main() {
             mpc_err_print(r.error);
             mpc_err_delete(r.error);
         }
-
 
         free(input);
     }
