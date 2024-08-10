@@ -1,10 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <editline/readline.h>
 
 #include "mpc.h"
 
+#ifdef _WIN32
+
+static char buffer[2048];
+
+char* readline(char* msg) {
+    fputs(msg, stdout);
+    fgets(buffer, 2048, stdin);
+    char* s = malloc(strlen(buffer) + 1);
+    strcpy(s, buffer);
+    s[strlen(s) - 1] = '\0';
+    return s;
+}
+
+void add_history(char* unused) {}
+
+#else
+#include <editline/readline.h>
+#endif
 #define LASSERT(args, cond, fmt, ...) \
     if (!(cond)) { \
         lval* err = lval_err(fmt, ##__VA_ARGS__); \

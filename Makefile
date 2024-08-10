@@ -1,5 +1,9 @@
-all: clisp.c
-	gcc -Wall clisp.c mpc.c -ledit -lm -o clisp
+CC=gcc
+CFLAGS=-Wall -lm
 
-debug: clisp.c 
-	gcc -Wall clisp.c mpc.c -g -ledit -lm -o clisp
+ifneq ($(OS),Windows_NT)
+	CFLAGS += -ledit
+endif
+
+all: clisp.c mpc.c
+	gcc -o clisp $^ $(CFLAGS)
