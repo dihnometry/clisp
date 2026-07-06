@@ -165,6 +165,7 @@ void lval_del(lval* v) {
                 lval_del(v->body);
                 lenv_del(v->env);
             }
+            // if (v->sym) free(v->sym);
             break;
         case LVAL_SFUN:
         case LVAL_SYM: free(v->sym); break;
@@ -231,8 +232,8 @@ lval* lval_copy(lval* v) {
                 x->body = lval_copy(v->body);
                 x->env = lenv_copy(v->env);
             }
-            x->sym = malloc(strlen(v->sym) + 1);
-            strcpy(x->sym, v->sym);
+            x->sym = v->sym ? malloc(strlen(v->sym) + 1) : NULL;
+            if (x->sym) strcpy(x->sym, v->sym);
             break;
 
         case LVAL_ERR:
@@ -319,7 +320,7 @@ lval* lval_join(lval* x, lval* y) {
 }
 
 lenv* lenv_new(void) {
-    lenv* env = malloc(sizeof(lenv*));
+    lenv* env = malloc(sizeof(lenv));
     env->par = NULL;
     env->count = 0;
     env->syms = NULL;
@@ -338,7 +339,7 @@ void lenv_del(lenv* e) {
 }
 
 lenv* lenv_copy(lenv* e) {
-    lenv* n = malloc(sizeof(lenv*));
+    lenv* n = malloc(sizeof(lenv));
     n->par = e->par;
     n->count = e->count;
     n->syms = malloc(sizeof(char*) * n->count);
@@ -349,7 +350,7 @@ lenv* lenv_copy(lenv* e) {
         n->vals[i] = lval_copy(e->vals[i]);
     }
 
-    lenv_del(e);
+    // lenv_del(e);
     return n;
 }
 
@@ -385,6 +386,7 @@ void lenv_put(lenv* e, lval* k, lval* v) {
 lval* lval_lambda(lval* formals, lval* body) {
     lval* v = malloc(sizeof(lval));
     v->builtin = NULL;
+    v->sym = NULL;
     v->env = lenv_new();
     v->type = LVAL_FUN;
     v->formals = formals;
@@ -416,8 +418,13 @@ lval* builtin_tail(lenv* e, lval* a) {
             LTYPE_ERR("tail", a->cell[0]->type, LVAL_QEXPR));
     LASSERT(a, a->cell[0]->count != 0, LEMP_ERR("tail"));
 
+    // Esto es más bien un (last)
+    // lval* v = lval_take(a, 0);
+    // while (v->count > 1) { lval_del(lval_pop(v, 0)); }
+    // return v;
+
     lval* v = lval_take(a, 0);
-    while (v->count > 1) { lval_del(lval_pop(v, 0)); }
+    lval_del(lval_pop(v, 0));
     return v;
 }
 
@@ -744,7 +751,7 @@ int main() {
         ", Number, Symbol, Sexpr, Qexpr, Expr, Clisp);
 
 
-    puts("Clisp version 0.0.0.1");
+    puts("Clisp version 0.0.1");
     puts("Exit: Ctrl + C \n");
 
     lenv* env = lenv_new();

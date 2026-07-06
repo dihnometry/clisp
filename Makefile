@@ -6,4 +6,7 @@ ifneq ($(OS),Windows_NT)
 endif
 
 all: clisp.c mpc.c
-	gcc -o clisp $^ $(CFLAGS)
+	$(CC) -o clisp $^ $(CFLAGS)
+
+debug: clisp.c mpc.c
+	$(CC) -g -fsanitize=address -o clisp $^ $(CFLAGS)
